@@ -1,16 +1,21 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Let's Ride</title>
+    <title>Victoria Roads Map with Accident Counts</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <style>
-        body {
+        html, body {
+            height: 100%;
             margin: 0;
             font-family: Arial, Helvetica, sans-serif;
+        }
+        #container {
             display: flex;
             flex-direction: column;
-            align-items: center;
+            height: 100%;
         }
         header {
             width: 100%;
@@ -24,11 +29,11 @@
         header .logo {
             font-size: 24px;
             font-weight: bold;
-            padding-left: 50px;
+            padding-left: 10px;
         }
         nav {
             display: flex;
-            padding-right: 50px;
+            padding-right: 90px;
         }
         nav a {
             margin-left: 20px;
@@ -39,33 +44,97 @@
         nav a:hover {
             text-decoration: underline;
         }
-        .content {
-            text-align: center;
-            margin: 40px 0;
+        #map-container {
+            flex: 1;
+            display: flex;
         }
-        .content h1 {
-            font-size: 48px;
-            margin-bottom: 10px;
+        #map {
+            flex: 1;
         }
-        .content p {
-            font-size: 18px;
-            color: #666;
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+        }
+        .dimmed-tiles {
+            filter: brightness(50%);
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="logo">TA14</div>
-        <nav>
-            <a href="index.html">Home</a>
-            <a href="accidents.html">Bicycle Accidents</a>
-            <a href="about.html">About Us</a>
-        </nav>
-    </header>
-    <div class="content">
-        <h1>Coming Soon!!</h1>
-        <p>Please wait for the next update..</p>
+    <div id="container">
+        <header>
+            <div class="logo">TA14</div>
+            <nav>
+                <a href="home.html">Home</a>
+                <a href="routes.html">Bicycle Routes</a>
+            </nav>
+        </header>
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
     </div>
+    <script>
+        // Function to get color based on accident count
+        function getColor(d) {
+            return d > 1000 ? '#800026' :
+                   d > 500  ? '#BD0026' :
+                   d > 200  ? '#E31A1C' :
+                   d > 100  ? '#FC4E2A' :
+                   d > 50   ? '#FD8D3C' :
+                   d > 10   ? '#FEB24C' :
+                             '#FFEDA0';
+        }
 
+        // Function to style each feature
+        function style(feature) {
+            return {
+                fillColor: getColor(feature.properties.COUNT),
+                weight: 4,
+                opacity: 0.8,
+                color: getColor(feature.properties.COUNT),
+                dashArray: '3',
+                fillOpacity: 0.7
+            };
+        }
+
+        // Initialize the map
+        var map = L.map('map').setView([-37.8129, 144.9483], 15);
+
+        // Add a base layer with the dimmed tiles class
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map).getContainer().classList.add('dimmed-tiles');
+
+        // Show accident count in pop-up
+        function onEachFeature(feature, layer) {
+            layer.on({
+                click: function (e) {
+                    var props = feature.properties;
+                    var popUpContent = `<div>
+                                            <h4>${props.name}</h4>
+                                            <p>Number of Accidents: ${props.COUNT || 0}</p>
+                                        </div>`;
+
+                    layer.bindPopup(popUpContent).openPopup();
+                }
+            });
+        }
+
+        // Load the GeoJSON data with accident counts
+        var geojson;
+        fetch('Merged_Street_Names_with_Counts.geojson')
+            .then(response => response.json())
+            .then(data => {
+                geojson = L.geoJson(data, {
+                    style: style,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+            });
+
+    </script>
 </body>
 </html>
