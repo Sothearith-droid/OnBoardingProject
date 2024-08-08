@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Victoria LGAs Map with Severity Distribution</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px;
+            background-color: white;
+            box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
+        }
+        header .logo {
+            font-size: 24px;
+            font-weight: bold;
+            padding-left: 10px;
+        }
+        nav {
+            display: flex;
+            padding-right: 90px;
+        }
+        nav a {
+            margin-left: 20px;
+            text-decoration: none;
+            color: black;
+            font-size: 18px;
+        }
+        nav a:hover {
+            text-decoration: underline;
+        }
+        #map-container {
+            flex: 1;
+            display: flex;
+        }
+        #map {
+            flex: 1;
+        }
+        .info {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+        }
+        .chart-container {
+            width: 300px;
+            height: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <header>
+            <div class="logo">TA14</div>
+            <nav>
+                <a href="home.html">Home</a>
+                <a href="routes.html">Bicycle Routes</a>
+            </nav>
+        </header>
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+    <script>
+        // Function to get color based on accident count
+        function getColor(d) {
+            return d > 1000 ? '#800026' :
+                   d > 500  ? '#BD0026' :
+                   d > 200  ? '#E31A1C' :
+                   d > 100  ? '#FC4E2A' :
+                   d > 50   ? '#FD8D3C' :
+                   d > 10   ? '#FEB24C' :
+                             '#FFEDA0';
+        }
+
+        // Function to style each feature
+        function style(feature) {
+            return {
+                fillColor: getColor(feature.properties.ACCIDENT_COUNT),
+                weight: 2,
+                opacity: 1,
+                color: 'white',
+                dashArray: '3',
+                fillOpacity: 0.7
+            };
+        }
+
+        // Initialize the map
+        var map = L.map('map').setView([-37.4713, 144.7852], 8);
+
+        // Add a base layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Show severity distribution in pop-up
+        function onEachFeature(feature, layer) {
+            layer.on({
+                click: function (e) {
+                    var props = feature.properties;
+                    var uniqueId = 'chart-' + L.Util.stamp(layer);
+                    var popUpContent = `<div>
+                                            <h4>${props.lga_name}</h4>
+                                            <p>Number of Accidents: ${props.ACCIDENT_COUNT || 0}</p>
+                                            <div class="chart-container"><canvas id="${uniqueId}"></canvas></div>
+                                        </div>`;
+
+                    layer.bindPopup(popUpContent).openPopup();
+
+                    // Wait for the pop-up to open and then create the chart
+                    setTimeout(function () {
+                        var ctx = document.getElementById(uniqueId).getContext('2d');
+                        var chart = new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: ['Fatal', 'Serious', 'Minor'],
+                                datasets: [{
+                                    label: 'Accident Count',
+                                    data: [props["Severity 1"] || 0, props["Severity 2"] || 0, props["Severity 3"] || 0],
+                                    backgroundColor: [
+                                        'rgba(255, 99, 132, 0.2)',
+                                        'rgba(54, 162, 235, 0.2)',
+                                        'rgba(75, 192, 192, 0.2)'
+                                    ],
+                                    borderColor: [
+                                        'rgba(255, 99, 132, 1)',
+                                        'rgba(54, 162, 235, 1)',
+                                        'rgba(75, 192, 192, 1)'
+                                    ],
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                scales: {
+                                    y: {
+                                        beginAtZero: true
+                                    }
+                                }
+                            }
+                        });
+                    }, 500);  // Wait for 500ms to ensure the pop-up is open
+                }
+            });
+        }
+
+        // Load the GeoJSON data with severity distribution
+        var geojson;
+        fetch('victoria_lgas_with_severity_1.geojson')
+            .then(response => response.json())
+            .then(data => {
+                geojson = L.geoJson(data, {
+                    style: style,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+            });
+
+        // Function to add accident locations to the map
+        function addAccidentLocations(data) {
+            var accidentLayer = L.geoJson(data, {
+                pointToLayer: function (feature, latlng) {
+                    return L.circleMarker(latlng, {
+                        radius: 8,
+                        fillColor: "#ff7800",
+                        color: "#000",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    });
+                },
+                onEachFeature: function (feature, layer) {
+                    var props = feature.properties;
+                    var popUpContent = `<div>
+                                            <h4>Accident Information</h4>
+                                            <p>ROAD_GEOMETRY_DESC: ${props.ROAD_GEOMETRY_DESC}</p>
+                                            <p>TRAFFIC_CONTROL_DESC: ${props.TRAFFIC_CONTROL_DESC}</p>
+                                            <p>ACCIDENT_TYPE_DESC: ${props.ACCIDENT_TYPE_DESC}</p>
+                                        </div>`;
+                    layer.bindPopup(popUpContent);
+                }
+            }).addTo(map);
+        }
+
+        // Load the accident locations GeoJSON data
+        fetch('accidents_with_location.geojson')
+            .then(response => response.json())
+            .then(data => {
+                addAccidentLocations(data);
+            });
+    </script>
+</body>
+</html>
